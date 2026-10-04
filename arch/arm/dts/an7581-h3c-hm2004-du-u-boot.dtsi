@@ -8,10 +8,39 @@ status_led: &{/leds/led-power} {
 
 #include "an758x-status-led-u-boot.dtsi"
 
+/*
+ * The data volumes below must stay in lockstep with the Linux UBI volume
+ * table in ponwrt's target/linux/airoha/dts/an7581-h3c-hm2004-du-ubi-parts.dtsi.
+ *
+ * The original overlay declared a single 1 MiB "factory" volume, which has no
+ * counterpart on the Linux side and no purpose on a PON ONT. A PON terminal
+ * needs two data volumes:
+ *
+ *   bosa : optical module calibration. stock2ubi and the recovery web page
+ *          populate it from the running system, and Linux exposes the 512-byte
+ *          BOB block through NVMEM at offset 0x2 so airoha-ponctl/airoha-pond
+ *          can program the optics.
+ *   ri   : PON identity. Offset 0x1a holds VEND plus eight hexadecimal VSSN
+ *          characters; offset 0x3e holds the factory MAC, which this U-Boot
+ *          reads back through ethaddr_factory (= ubi read 0x90000000 ri ;
+ *          env readmem -b ethaddr 0x9000003e 0x6) so the ONT keeps a stable
+ *          MAC instead of falling back to CONFIG_NET_RANDOM_ETHADDR.
+ *
+ * Both are 256 KiB, matching an7581-nokia-xg-040g-md-u-boot.dtsi. If the two
+ * sides disagree, the recovery page writes a volume U-Boot does not expect and
+ * Linux cannot find the volumes U-Boot created, so they must always match.
+ */
 &recovery_layout {
-	factory {
-		volume-name = "factory";
-		volume-size = <0x100000>;
+	bosa {
+		volume-name = "bosa";
+		volume-size = <0x40000>;
+		volume-type = "dynamic";
+		bootph-all;
+	};
+
+	ri {
+		volume-name = "ri";
+		volume-size = <0x40000>;
 		volume-type = "dynamic";
 		bootph-all;
 	};
