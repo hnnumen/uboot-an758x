@@ -9,38 +9,31 @@ status_led: &{/leds/led-power} {
 #include "an758x-status-led-u-boot.dtsi"
 
 /*
- * The data volumes below must stay in lockstep with the Linux UBI volume
- * table in ponwrt's target/linux/airoha/dts/an7581-h3c-hm2004-du-ubi-parts.dtsi.
+ * The board-data volume must stay in lockstep with the Linux UBI volume table
+ * in ponwrt's target/linux/airoha/dts/an7581-h3c-hm2004-du.dts, which declares
+ * a single "factory" volume holding the compact 1 MiB H3C layout:
  *
- * The original overlay declared a single 1 MiB "factory" volume, which has no
- * counterpart on the Linux side and no purpose on a PON ONT. A PON terminal
- * needs two data volumes:
+ *   0x0000  magic "H3C-1MiB"          0x0010  label / lan1 MAC
+ *   0x0020  eth0 MAC                  0x0030  pon0 MAC
+ *   0x0040  5G radio MAC              0x0050  2.4G radio MAC
+ *   0x0060  device SN (12-byte ASCII) 0x1000  Wi-Fi EEPROM (MT7916, 0x1000)
+ *   0x2000  PON calibration (EN7572, 0x200)
  *
- *   bosa : optical module calibration. stock2ubi and the recovery web page
- *          populate it from the running system, and Linux exposes the 512-byte
- *          BOB block through NVMEM at offset 0x2 so airoha-ponctl/airoha-pond
- *          can program the optics.
- *   ri   : PON identity. Offset 0x1a holds VEND plus eight hexadecimal VSSN
- *          characters; offset 0x3e holds the factory MAC, which this U-Boot
- *          reads back through ethaddr_factory (= ubi read 0x90000000 ri ;
- *          env readmem -b ethaddr 0x9000003e 0x6) so the ONT keeps a stable
- *          MAC instead of falling back to CONFIG_NET_RANDOM_ETHADDR.
+ * net/lwip/httpd.c:create_recovery_layout() always creates fip (0x100000
+ * static) plus ubootenv/ubootenv2 (0x1f000 dynamic), and then every subnode of
+ * this node in order. The names and sizes below are therefore the volumes the
+ * recovery page writes and the ones Linux binds to later by volname.
  *
- * Both are 256 KiB, matching an7581-nokia-xg-040g-md-u-boot.dtsi. If the two
- * sides disagree, the recovery page writes a volume U-Boot does not expect and
- * Linux cannot find the volumes U-Boot created, so they must always match.
+ * Do not switch this board to the Nokia "bosa"/"ri" pair. H3C has no such
+ * volumes on the Linux side: board.d/03_pon_data writes pon_data_target
+ * "factory ubi 1048576" and platform.sh gates sysupgrade on
+ * airoha_require_ubi_layout factory, so a bosa/ri layout makes the installer
+ * refuse to flash and leaves every nvmem cell without a provider.
  */
 &recovery_layout {
-	bosa {
-		volume-name = "bosa";
-		volume-size = <0x40000>;
-		volume-type = "dynamic";
-		bootph-all;
-	};
-
-	ri {
-		volume-name = "ri";
-		volume-size = <0x40000>;
+	factory {
+		volume-name = "factory";
+		volume-size = <0x100000>;
 		volume-type = "dynamic";
 		bootph-all;
 	};
